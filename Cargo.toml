@@ -1,0 +1,24 @@
+[package]
+name = "woosh"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tonic = "0.7.2"
+prost = "0.10.4"
+prost-types = "0.10.1"
+tokio = { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
+futures = { version = "0.3.21", default-features = false, features = ["alloc"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+
+
+[[bin]] # Bin to run the HelloWorld gRPC server
+name = "woosh-server"
+path = "src/woosh.rs"
+
+[[bin]] # Bin to run the HelloWorld gRPC client
+name = "woosh-test-client"
+path = "src/client.rs"
+
+[build-dependencies]
+tonic-build = "0.7"
