@@ -23,6 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "third_party/remote-apis/build/bazel/remote/execution/v2/remote_execution.proto",
                 "third_party/remote-apis/build/bazel/semver/semver.proto",
                 "third_party/googleapis/google/rpc/status.proto",
+                "third_party/googleapis/google/bytestream/bytestream.proto",
                 "third_party/googleapis/google/longrunning/operations.proto",
             ],
             &["third_party/remote-apis", "third_party/googleapis"],

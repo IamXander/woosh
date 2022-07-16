@@ -1,0 +1,5 @@
+common:remote --remote_cache=grpc://[::1]:50051/
+common:remote --experimental_guard_against_concurrent_changes
+# common:remote --experimental_remote_platform_override='properties:{name:"key1" value:"value1" name:"key2" value:"value2"}'
+# common:remote --client_debug
+common:remote -s

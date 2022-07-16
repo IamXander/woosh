@@ -20,4 +20,13 @@ pub mod google {
     pub mod longrunning {
         tonic::include_proto!("google.longrunning");
     }
+    pub mod bytestream {
+        tonic::include_proto!("google.bytestream");
+    }
 }
+
+pub mod resource_id;
+
+pub mod memory_store;
+
+pub mod woosh;

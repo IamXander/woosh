@@ -10,6 +10,7 @@ prost-types = "0.10.1"
 tokio = { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
 futures = { version = "0.3.21", default-features = false, features = ["alloc"] }
 tokio-stream = { version = "0.1", features = ["net"] }
+hex = "0.4.3"
 
 
 [[bin]] # Bin to run the HelloWorld gRPC server
