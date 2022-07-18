@@ -24,9 +24,3 @@ pub mod google {
         tonic::include_proto!("google.bytestream");
     }
 }
-
-pub mod resource_id;
-
-pub mod memory_store;
-
-pub mod woosh;
