@@ -2,46 +2,43 @@
 
 use crate::proto::build::bazel::remote::execution::v2::ActionResult;
 use crate::resource_id::{ResourceData, ResourceId};
+use std::cmp;
 use std::collections::HashMap;
 
+#[derive(Clone)]
 enum CacheEntry {
-    ActionResult,
-    ResourceData,
+    AR(ActionResult),
+    RD(ResourceData),
 }
 
 #[derive(Default)]
 pub struct MemoryStore {
-    cas: HashMap<ResourceId, ResourceData>,
-    action_cache: HashMap<ResourceId, ActionResult>,
+    cache: HashMap<ResourceId, CacheEntry>,
     upload_cache: HashMap<String, Vec<u8>>,
 }
 
 impl MemoryStore {
     pub fn new() -> MemoryStore {
         MemoryStore {
-            cas: HashMap::new(),
-            action_cache: HashMap::new(),
+            cache: HashMap::new(),
             upload_cache: HashMap::new(),
         }
     }
 
-    pub fn get_action_cache_ref(&self, resource_id: &ResourceId) -> Option<&ActionResult> {
-        return self.action_cache.get(resource_id);
-    }
-
-    pub fn get_action_cache(&self, resource_id: &ResourceId) -> Option<ActionResult> {
-        return self.action_cache.get(resource_id).cloned();
-    }
-
     pub fn set_action_cache(&mut self, resource_id: ResourceId, action_result: ActionResult) {
-        self.action_cache.insert(resource_id, action_result);
+        self.cache
+            .insert(resource_id, CacheEntry::AR(action_result));
     }
 
     pub fn get_write_status(&mut self, resource_name: String) -> (u64, bool) {
         let (res_id, writer_uuid) = ResourceId::from_resource_name(&resource_name);
-        let cas_val = self.cas.get(&res_id);
-        if cas_val.is_some() && cas_val.unwrap().writer_uuid == writer_uuid {
-            return (cas_val.unwrap().data.len().try_into().unwrap(), true);
+        let cas_val = self.cache.get(&res_id);
+        if cas_val.is_some() {
+            if let CacheEntry::RD(cas_val) = cas_val.unwrap() {
+                if cas_val.writer_uuid == writer_uuid {
+                    return (cas_val.data.len().try_into().unwrap(), true);
+                }
+            }
         }
         let cache_val = self.upload_cache.get(&resource_name);
         // Nothing has been written yet to this value
@@ -54,12 +51,12 @@ impl MemoryStore {
     fn store_data(&mut self, resource_name: &String, data: Vec<u8>) -> u64 {
         let (res_id, writer_uuid) = ResourceId::from_resource_name(resource_name);
         let data_len = data.len().try_into().unwrap();
-        self.cas.insert(
+        self.cache.insert(
             res_id,
-            ResourceData {
+            CacheEntry::RD(ResourceData {
                 data: data,
                 writer_uuid: writer_uuid,
-            },
+            }),
         );
         return data_len;
     }
@@ -116,17 +113,35 @@ impl MemoryStore {
         Some(self.store_data(resource_name, erased_data))
     }
 
-    pub fn get_data(&self, resource_id: &ResourceId, offset: u64, limit: u64) -> Option<Vec<u8>> {
-        let resource_data = self.cas.get(&resource_id)?;
-        let offset: usize = offset.try_into().unwrap();
-        let limit: usize = limit.try_into().unwrap();
-        if offset >= resource_data.data.len().try_into().unwrap() {
-            return Some(vec![]);
+    pub fn get_action_cache(&self, resource_id: &ResourceId) -> Option<ActionResult> {
+        let cache_entry = self.cache.get(resource_id)?;
+        match cache_entry {
+            CacheEntry::AR(ar) => return Some(ar.clone()),
+            CacheEntry::RD(_) => return None,
         }
-        Some(resource_data.data[offset..offset + limit].to_vec())
     }
 
-    pub fn has_data(&self, resource_id: &ResourceId) -> bool {
-        self.cas.contains_key(&resource_id)
+    pub fn get_data(&self, resource_id: &ResourceId, offset: u64, limit: u64) -> Option<Vec<u8>> {
+        let cache_entry = self.cache.get(&resource_id)?;
+        if let CacheEntry::RD(resource_data) = cache_entry {
+            let offset: usize = offset.try_into().unwrap();
+            let limit: usize = limit.try_into().unwrap();
+            if offset >= resource_data.data.len().try_into().unwrap() {
+                return Some(vec![]);
+            }
+            let limit = cmp::min(limit, resource_data.data.len());
+            Some(resource_data.data[offset..limit].to_vec())
+        } else {
+            return None;
+        }
+        // match resource_data {
+        //     CacheEntry::ActionResult => return None,
+        //     CacheEntry::ResourceData(rd) => let resource_data = rd,
+        // }
+        // resource_data.
+    }
+
+    pub fn in_cache(&self, resource_id: &ResourceId) -> bool {
+        self.cache.contains_key(&resource_id)
     }
 }

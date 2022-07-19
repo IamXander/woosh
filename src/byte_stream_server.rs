@@ -23,7 +23,7 @@ pub struct ReadResponseStream {
     memory_store: Arc<Mutex<MemoryStore>>,
     resource_id: ResourceId,
     read_offset: u64,
-    read_limit: u64,
+    read_limit: Option<u64>,
 }
 
 // resource_name: "blobs/8f9cf8177c72cbdc437b5be8e336361ae1b578dfaade8174bcc196890ef6871e/38397", read_offset: 0, read_limit: 0
@@ -32,9 +32,14 @@ impl ReadResponseStream {
         memory_store: Arc<Mutex<MemoryStore>>,
         resource_id: ResourceId,
         read_offset: u64,
-        read_limit: u64,
+        read_limit: Option<u64>,
     ) -> ReadResponseStream {
-        assert!(read_limit >= read_offset);
+        assert!(read_limit.is_none() || read_limit.unwrap() != 0);
+        assert!(read_limit.is_none() || read_limit.unwrap() >= read_offset);
+        println!(
+            "Created response stream for {:?} from {:?} to {:?}",
+            resource_id, read_offset, read_limit
+        );
         ReadResponseStream {
             memory_store: memory_store,
             resource_id: resource_id,
@@ -48,22 +53,38 @@ impl Stream for ReadResponseStream {
     type Item = Result<ReadResponse, Status>;
 
     fn poll_next(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let read_dist = cmp::min(MAX_MESSAGE_SIZE, self.read_limit - self.read_offset);
+        let chunked_read_distance = cmp::min(
+            MAX_MESSAGE_SIZE,
+            self.read_limit.unwrap_or(u64::MAX) - self.read_offset,
+        );
         let data = self.memory_store.lock().unwrap().get_data(
             &self.resource_id,
             self.read_offset,
-            read_dist,
+            self.read_offset + chunked_read_distance,
         );
+
         if data.is_none() {
+            println!(
+                "THERE WAS AN ERROR WRITING DATA for {:?} from {:?} with a length of {:?}",
+                self.resource_id, self.read_offset, chunked_read_distance
+            );
             return std::task::Poll::Ready(Some(Err(Status::new(
                 tonic::Code::NotFound,
                 "There was an error writing data",
             ))));
         }
         let data = data.unwrap();
+        println!(
+            "Sending data for {:?} from {:?} with a length of {:?} which is {:?} bytes",
+            self.resource_id,
+            self.read_offset,
+            chunked_read_distance,
+            data.len()
+        );
+        self.read_offset += chunked_read_distance;
         if data.is_empty() {
             // There is no more data left to send back
             return std::task::Poll::Ready(None);
@@ -150,11 +171,16 @@ impl ByteStream for ByteStreamServer {
         // Ok(tonic::Streaming::())
         println!("READ:\n{:?}", read_request);
         let read_request = read_request.into_inner();
+        let read_limit: Option<u64> = if read_request.read_limit == 0 {
+            None
+        } else {
+            Some(read_request.read_limit.try_into().unwrap())
+        };
         return Ok(tonic::Response::new(ReadResponseStream::new(
             self.memory_store.clone(),
             read_request.resource_name.try_into().unwrap(),
             read_request.read_offset.try_into().unwrap(),
-            read_request.read_limit.try_into().unwrap(),
+            read_limit,
         )));
         // todo!()
     }

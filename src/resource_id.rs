@@ -1,6 +1,6 @@
 use crate::proto::build::bazel::remote::execution::v2::Digest;
 
-// #[derive(PartialEq, Eq, Hash)]
+#[derive(Clone)]
 pub struct ResourceData {
     pub writer_uuid: String,
     pub data: Vec<u8>,

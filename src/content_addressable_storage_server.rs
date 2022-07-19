@@ -42,7 +42,7 @@ impl ContentAddressableStorage for ContentAddressableStorageServer {
         let mut missing_blob_digests = vec![];
         for blob_digest in find_missing_blobs_req.blob_digests {
             let resource_id = blob_digest.clone().into();
-            if !self.memory_store.lock().unwrap().has_data(&resource_id) {
+            if !self.memory_store.lock().unwrap().in_cache(&resource_id) {
                 missing_blob_digests.push(blob_digest);
             }
         }
