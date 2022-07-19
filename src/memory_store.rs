@@ -2,8 +2,8 @@ use log::trace;
 
 use crate::proto::build::bazel::remote::execution::v2::ActionResult;
 use crate::resource_id::{ResourceData, ResourceId};
-use std::cmp;
 use std::collections::HashMap;
+use std::{cmp, fmt};
 
 #[derive(Clone)]
 enum CacheEntry {
@@ -11,10 +11,36 @@ enum CacheEntry {
     RD(ResourceData),
 }
 
+impl fmt::Display for ActionResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Display for CacheEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CacheEntry::AR(action_result) => write!(f, "{}", action_result),
+            CacheEntry::RD(resource_data) => write!(f, "{}", resource_data),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct MemoryStore {
     cache: HashMap<ResourceId, CacheEntry>,
     upload_cache: HashMap<String, Vec<u8>>,
+}
+
+impl fmt::Display for MemoryStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MemoryStore:\n")?;
+        for (key, val) in self.cache.iter() {
+            write!(f, "\t{}: {}\n", key, val)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl MemoryStore {

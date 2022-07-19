@@ -37,7 +37,7 @@ impl ReadResponseStream {
         assert!(read_limit.is_none() || read_limit.unwrap() != 0);
         assert!(read_limit.is_none() || read_limit.unwrap() >= read_offset);
         trace!(
-            "Created response stream for {:?} from {:?} to {:?}",
+            "Created response stream for {} from {:?} to {:?}",
             resource_id,
             read_offset,
             read_limit
@@ -80,7 +80,7 @@ impl Stream for ReadResponseStream {
         }
         let data = data.unwrap();
         trace!(
-            "Sending data for {:?} from {:?} with a length of {:?} which is {:?} bytes",
+            "Sending data for {} from {:?} with a length of {:?} which is {:?} bytes",
             self.resource_id,
             self.read_offset,
             chunked_read_distance,
@@ -135,7 +135,7 @@ impl ByteStream for ByteStreamServer {
             if resource_name == "" {
                 resource_name = write_request.resource_name.clone()
             }
-            trace!("WRITE:\n{:?}", write_request);
+            // trace!("WRITE:\n{:?}", write_request);
             comitted_len = self.memory_store.lock().unwrap().append_data(
                 &resource_name,
                 write_request.data,

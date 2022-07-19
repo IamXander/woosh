@@ -52,6 +52,8 @@ impl ActionCache for ActionCacheServer {
             ));
         }
 
+        trace!("{}", self.memory_store.lock().unwrap());
+
         return Ok(tonic::Response::new(action_result.unwrap().clone()));
     }
 
@@ -72,12 +74,14 @@ impl ActionCache for ActionCacheServer {
                 "Update action result request does not have an action digest",
             ));
         }
-        trace!("UPDATE:\n{:?}", update_action_result_request);
+        // trace!("UPDATE:\n{:?}", update_action_result_request);
         let action_result = update_action_result_request.action_result.unwrap();
         self.memory_store.lock().unwrap().set_action_cache(
             update_action_result_request.action_digest.unwrap().into(),
             action_result.clone(),
         );
+
+        trace!("{}", self.memory_store.lock().unwrap());
 
         return Ok(tonic::Response::new(action_result.clone()));
     }

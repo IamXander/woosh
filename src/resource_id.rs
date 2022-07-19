@@ -1,6 +1,8 @@
+use std::{cmp, fmt::Display};
+
 use crate::proto::build::bazel::remote::execution::v2::Digest;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ResourceData {
     pub writer_uuid: String,
     pub data: Vec<u8>,
@@ -19,16 +21,33 @@ pub struct ResourceId {
     pub hash: SHA256,
 }
 
-// pub fn convert_hash(hash: &str) -> [u8; 32] {
-//     let hash_vec = hex::decode(hash).unwrap();
-//     assert_eq!(hash_vec.len(), 32);
+impl Display for ResourceData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let elms_to_show = cmp::min(self.data.len(), 16);
+        let elms_print: Vec<String> = self.data[0..elms_to_show]
+            .into_iter()
+            .map(|i| i.to_string())
+            .collect();
+        write!(
+            f,
+            "ResourceData of length {} with [{}]",
+            self.data.len(),
+            elms_print.join(", ")
+        )
+    }
+}
 
-//     let mut chash: [u8; 32] = [0; 32];
-//     for (i, b) in hash_vec.iter().enumerate() {
-//         chash[i] = *b;
-//     }
-//     chash
-// }
+impl Display for SHA256 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.hash))
+    }
+}
+
+impl Display for ResourceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.hash, self.length)
+    }
+}
 
 impl From<&str> for SHA256 {
     fn from(hash: &str) -> Self {
@@ -83,20 +102,6 @@ impl TryFrom<String> for ResourceId {
         })
     }
 }
-
-// impl ResourceData {
-//     pub fn from_resource_name(resource_name: String) -> WriteResourceId {
-//          // resource_name: "uploads/e57a73ff-744e-4fa3-b9af-b2b384589149/blobs/639b6acdc55bebb727fb0aa19230fc3d548b62e9fc9a0eb9deda55f4c352de32/1146", write_offset: 0, finish_write: true, data = []
-//         let resources: Vec<&str> = resource_name.split('/').collect();
-//         assert_eq!(resources.len(), 5);
-
-//         WriteResourceId{
-//             uuid: resources[1].into(),
-//             length: resources[4].parse().unwrap(),
-//             hash: convert_hash(resources[3]),
-//         }
-//     }
-// }
 
 impl ResourceId {
     pub fn from_resource_name(resource_name: &String) -> (ResourceId, String) {
