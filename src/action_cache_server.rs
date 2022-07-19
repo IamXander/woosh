@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use log::{trace, warn};
 use tonic::Status;
 
 use crate::{
@@ -32,7 +33,7 @@ impl ActionCache for ActionCacheServer {
     ) -> Result<tonic::Response<ActionResult>, Status> {
         let get_action_result_request = get_action_result_request.into_inner();
         if get_action_result_request.action_digest.is_none() {
-            println!(
+            warn!(
                 "Action result request does not have an action digest, {:?}",
                 get_action_result_request
             );
@@ -52,36 +53,6 @@ impl ActionCache for ActionCacheServer {
         }
 
         return Ok(tonic::Response::new(action_result.unwrap().clone()));
-
-        // if get_action_result_request.is
-        // self.memory_store.lock().unwrap().get_action_cache(sha)
-        // get_action_result_request.into_inner().inline_stderr
-        // println!("GET:\n{:?}", get_action_result_request);
-        // crate::proto::google::rpc::Code::NotFound.into()
-        // Err(Status::new(tonic::Code::NotFound, "Couldn't find it"))
-        // Err(Status {
-        //     code: crate::proto::google::rpc::Code::NotFound.into(),
-        //      message: "Couldn't find it".to_string(),
-        //      details: todo!(),
-        //      metadata: todo!(),
-        //       source: todo!()
-        //      })
-        // ActionResult {}
-        // let abc = ActionResult {
-        //     output_files: todo!(),
-        //     output_file_symlinks: todo!(),
-        //     output_symlinks: todo!(),
-        //     output_directories: todo!(),
-        //     output_directory_symlinks: todo!(),
-        //     exit_code: todo!(),
-        //     stdout_raw: todo!(),
-        //     stdout_digest: todo!(),
-        //     stderr_raw: todo!(),
-        //     stderr_digest: todo!(),
-        //     execution_metadata: todo!()
-        // };
-        // todo!()
-        // None
     }
 
     async fn update_action_result(
@@ -92,7 +63,7 @@ impl ActionCache for ActionCacheServer {
         if update_action_result_request.action_digest.is_none()
             || update_action_result_request.action_result.is_none()
         {
-            println!(
+            warn!(
                 "Update action result request does not have an action digest, {:?}",
                 update_action_result_request
             );
@@ -101,7 +72,7 @@ impl ActionCache for ActionCacheServer {
                 "Update action result request does not have an action digest",
             ));
         }
-        println!("UPDATE:\n{:?}", update_action_result_request);
+        trace!("UPDATE:\n{:?}", update_action_result_request);
         let action_result = update_action_result_request.action_result.unwrap();
         self.memory_store.lock().unwrap().set_action_cache(
             update_action_result_request.action_digest.unwrap().into(),
@@ -110,20 +81,4 @@ impl ActionCache for ActionCacheServer {
 
         return Ok(tonic::Response::new(action_result.clone()));
     }
-    // type ExecuteStream = ExecuteResponseStream;
-    // type WaitExecutionStream = WaitExecutionResponseStream;
-
-    // async fn execute(
-    //     &self,
-    //     req: Request<ExecuteRequest>,
-    // ) -> Result<tonic::Response<Self::ExecuteStream>, tonic::Status> {
-    //     todo!()
-    // }
-
-    // async fn wait_execution(
-    //     &self,
-    //     req: Request<WaitExecutionRequest>,
-    // ) -> Result<tonic::Response<Self::WaitExecutionStream>, tonic::Status> {
-    //     todo!()
-    // }
 }

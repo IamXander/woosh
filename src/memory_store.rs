@@ -1,4 +1,4 @@
-// mod memory_store;
+use log::trace;
 
 use crate::proto::build::bazel::remote::execution::v2::ActionResult;
 use crate::resource_id::{ResourceData, ResourceId};
@@ -76,9 +76,10 @@ impl MemoryStore {
             // If a write comes in with a non zero offset that we have not seen before
             if write_offset != 0 {
                 let (_, uuid) = ResourceId::from_resource_name(resource_name);
-                println!(
+                trace!(
                     "A new write attempted with offset {:?} that has uuid {:?}",
-                    write_offset, uuid
+                    write_offset,
+                    uuid
                 );
                 return None;
             }
@@ -95,7 +96,7 @@ impl MemoryStore {
         let written_data = written_data.unwrap();
         if write_offset != written_data.len().try_into().unwrap() {
             let (res_id, uuid) = ResourceId::from_resource_name(resource_name);
-            println!(
+            trace!(
                 "Current offset {:?} append to offset {:?} are different, skipping insertion, resource id: {:?}, uuid: {:?}",
                 written_data.len(),
                 write_offset,
@@ -134,11 +135,6 @@ impl MemoryStore {
         } else {
             return None;
         }
-        // match resource_data {
-        //     CacheEntry::ActionResult => return None,
-        //     CacheEntry::ResourceData(rd) => let resource_data = rd,
-        // }
-        // resource_data.
     }
 
     pub fn in_cache(&self, resource_id: &ResourceId) -> bool {

@@ -5,6 +5,7 @@ use std::{
 };
 
 use futures::Stream;
+use log::{error, trace, warn};
 use tonic::Status;
 
 use crate::{
@@ -26,7 +27,6 @@ pub struct ReadResponseStream {
     read_limit: Option<u64>,
 }
 
-// resource_name: "blobs/8f9cf8177c72cbdc437b5be8e336361ae1b578dfaade8174bcc196890ef6871e/38397", read_offset: 0, read_limit: 0
 impl ReadResponseStream {
     pub fn new(
         memory_store: Arc<Mutex<MemoryStore>>,
@@ -36,9 +36,11 @@ impl ReadResponseStream {
     ) -> ReadResponseStream {
         assert!(read_limit.is_none() || read_limit.unwrap() != 0);
         assert!(read_limit.is_none() || read_limit.unwrap() >= read_offset);
-        println!(
+        trace!(
             "Created response stream for {:?} from {:?} to {:?}",
-            resource_id, read_offset, read_limit
+            resource_id,
+            read_offset,
+            read_limit
         );
         ReadResponseStream {
             memory_store: memory_store,
@@ -54,7 +56,7 @@ impl Stream for ReadResponseStream {
 
     fn poll_next(
         mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         let chunked_read_distance = cmp::min(
             MAX_MESSAGE_SIZE,
@@ -67,7 +69,7 @@ impl Stream for ReadResponseStream {
         );
 
         if data.is_none() {
-            println!(
+            error!(
                 "THERE WAS AN ERROR WRITING DATA for {:?} from {:?} with a length of {:?}",
                 self.resource_id, self.read_offset, chunked_read_distance
             );
@@ -77,7 +79,7 @@ impl Stream for ReadResponseStream {
             ))));
         }
         let data = data.unwrap();
-        println!(
+        trace!(
             "Sending data for {:?} from {:?} with a length of {:?} which is {:?} bytes",
             self.resource_id,
             self.read_offset,
@@ -122,8 +124,7 @@ impl ByteStream for ByteStreamServer {
         loop {
             let write_request = messages.message().await;
             if write_request.is_err() {
-                println!("Write request was an error");
-                println!("{:?}", write_request);
+                warn!("Write request was an error {:?}", write_request);
                 break;
             }
             let write_request = write_request.unwrap();
@@ -134,7 +135,7 @@ impl ByteStream for ByteStreamServer {
             if resource_name == "" {
                 resource_name = write_request.resource_name.clone()
             }
-            println!("WRITE:\n{:?}", write_request);
+            trace!("WRITE:\n{:?}", write_request);
             comitted_len = self.memory_store.lock().unwrap().append_data(
                 &resource_name,
                 write_request.data,
@@ -142,17 +143,15 @@ impl ByteStream for ByteStreamServer {
                 write_request.finish_write,
             );
             if comitted_len.is_none() {
-                println!("There was an error writing data");
+                error!("There was an error writing data");
                 return Err(Status::new(
                     tonic::Code::Unknown,
                     "There was an error writing data",
                 ));
             }
-
-            // message
         }
         if comitted_len.is_none() {
-            println!("No data was ever comitted.");
+            error!("No data was ever comitted.");
             return Err(Status::new(
                 tonic::Code::Unknown,
                 "No data was ever comitted.",
@@ -168,8 +167,7 @@ impl ByteStream for ByteStreamServer {
         &self,
         read_request: tonic::Request<ReadRequest>,
     ) -> Result<tonic::Response<Self::ReadStream>, tonic::Status> {
-        // Ok(tonic::Streaming::())
-        println!("READ:\n{:?}", read_request);
+        trace!("READ:\n{:?}", read_request);
         let read_request = read_request.into_inner();
         let read_limit: Option<u64> = if read_request.read_limit == 0 {
             None
@@ -182,14 +180,13 @@ impl ByteStream for ByteStreamServer {
             read_request.read_offset.try_into().unwrap(),
             read_limit,
         )));
-        // todo!()
     }
 
     async fn query_write_status(
         &self,
         query_write_status_req: tonic::Request<QueryWriteStatusRequest>,
     ) -> Result<tonic::Response<QueryWriteStatusResponse>, Status> {
-        println!("QWS:\n{:?}", query_write_status_req);
+        trace!("QWS:\n{:?}", query_write_status_req);
         let (length, complete) = self
             .memory_store
             .lock()
