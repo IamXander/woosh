@@ -1,42 +1,32 @@
 mod action_cache_server;
 mod byte_stream_server;
+mod content_addressable_storage_server;
 mod memory_store;
 mod proto;
 mod resource_id;
 
-use proto::build::bazel::remote::execution::v2::{GetTreeRequest, WaitExecutionRequest};
-use proto::google::bytestream::{
-    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
-    WriteResponse,
-};
+use proto::build::bazel::remote::execution::v2::WaitExecutionRequest;
 use tonic::{transport::Server, Request, Response, Status};
 
-use futures::Stream;
-// use woosh::memory_store::MemoryStore;
 use crate::memory_store::MemoryStore;
-use crate::proto::build::bazel::remote::execution::v2::action_cache_server::{
-    ActionCache, ActionCacheServer,
-};
+use crate::proto::build::bazel::remote::execution::v2::action_cache_server::ActionCacheServer;
 use crate::proto::build::bazel::remote::execution::v2::capabilities_server::{
     Capabilities, CapabilitiesServer,
 };
-use crate::proto::build::bazel::remote::execution::v2::content_addressable_storage_server::{
-    ContentAddressableStorage, ContentAddressableStorageServer,
-};
+use crate::proto::build::bazel::remote::execution::v2::content_addressable_storage_server::ContentAddressableStorageServer;
 use crate::proto::build::bazel::remote::execution::v2::execution_server::{
     Execution, ExecutionServer,
 };
 use crate::proto::build::bazel::remote::execution::v2::{
-    digest_function, symlink_absolute_path_strategy, ActionCacheUpdateCapabilities, ActionResult,
-    BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
-    BatchUpdateBlobsResponse, CacheCapabilities, ExecuteRequest, FindMissingBlobsRequest,
-    FindMissingBlobsResponse, GetActionResultRequest, GetCapabilitiesRequest, GetTreeResponse,
-    PriorityCapabilities, ServerCapabilities, UpdateActionResultRequest,
+    digest_function, symlink_absolute_path_strategy, ActionCacheUpdateCapabilities,
+    CacheCapabilities, ExecuteRequest, GetCapabilitiesRequest, PriorityCapabilities,
+    ServerCapabilities,
 };
 use crate::proto::build::bazel::semver::SemVer;
-use crate::proto::google::bytestream::byte_stream_server::{ByteStream, ByteStreamServer};
+use crate::proto::google::bytestream::byte_stream_server::ByteStreamServer;
+use futures::Stream;
 use std::sync::{Arc, Mutex};
-use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Duration};
+use std::{net::ToSocketAddrs, pin::Pin};
 
 use crate::proto::build::bazel::remote::execution::v2::compressor;
 
@@ -77,8 +67,6 @@ use crate::proto::build::bazel::remote::execution::v2::compressor;
 //         }
 //     }
 // }
-type ReadResponseStream = Pin<Box<dyn Stream<Item = Result<ReadResponse, Status>> + Send>>;
-type GetTreeResponseStream = Pin<Box<dyn Stream<Item = Result<GetTreeResponse, Status>> + Send>>;
 type ExecuteResponseStream = Pin<
     Box<dyn Stream<Item = Result<crate::proto::google::longrunning::Operation, Status>> + Send>,
 >;
@@ -166,60 +154,6 @@ pub struct WooshServer {}
 //         todo!()
 //     }
 // }
-
-#[tonic::async_trait]
-impl ContentAddressableStorage for WooshServer {
-    type GetTreeStream = GetTreeResponseStream;
-
-    async fn find_missing_blobs(
-        &self,
-        find_missing_blobs_req: tonic::Request<FindMissingBlobsRequest>,
-    ) -> Result<Response<FindMissingBlobsResponse>, Status> {
-        println!("FB:\n{:?}", find_missing_blobs_req);
-        Ok(tonic::Response::new(FindMissingBlobsResponse {
-            missing_blob_digests: find_missing_blobs_req.into_inner().blob_digests,
-        }))
-        // todo!()
-    }
-
-    async fn batch_update_blobs(
-        &self,
-        batch_update_blobs_req: tonic::Request<BatchUpdateBlobsRequest>,
-    ) -> Result<Response<BatchUpdateBlobsResponse>, Status> {
-        println!("BUB:\n{:?}", batch_update_blobs_req);
-        todo!()
-    }
-
-    async fn batch_read_blobs(
-        &self,
-        batch_read_blobs_req: tonic::Request<BatchReadBlobsRequest>,
-    ) -> Result<Response<BatchReadBlobsResponse>, Status> {
-        println!("BRB:\n{:?}", batch_read_blobs_req);
-        todo!()
-    }
-
-    async fn get_tree(
-        &self,
-        req: Request<GetTreeRequest>,
-    ) -> Result<tonic::Response<Self::GetTreeStream>, tonic::Status> {
-        todo!()
-    }
-    // type WaitExecutionStream = WaitExecutionResponseStream;
-
-    // async fn execute(
-    //     &self,
-    //     req: Request<crate::build::bazel::remote::execution::v2::ExecuteRequest>,
-    // ) -> Result<tonic::Response<Self::ExecuteStream>, tonic::Status> {
-    //     todo!()
-    // }
-
-    // async fn wait_execution(
-    //     &self,
-    //     req: Request<crate::build::bazel::remote::execution::v2::WaitExecutionRequest>,
-    // ) -> Result<tonic::Response<Self::WaitExecutionStream>, tonic::Status> {
-    //     todo!()
-    // }
-}
 
 #[tonic::async_trait]
 impl Execution for WooshServer {
@@ -461,16 +395,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server1 = WooshServer {};
     let server2 = WooshServer {};
-    let server4 = WooshServer {};
     // build::bazel::remote::execution::v2::execution_server::ExecutionServer::new(server)
     Server::builder()
         .accept_http1(true)
         .add_service(CapabilitiesServer::new(server1))
         .add_service(ExecutionServer::new(server2))
-        .add_service(crate::action_cache_server::ActionCacheServer::new(
-            memory_store,
+        .add_service(ActionCacheServer::new(
+            crate::action_cache_server::ActionCacheServer::new(memory_store.clone()),
         ))
-        .add_service(ContentAddressableStorageServer::new(server4))
+        .add_service(ContentAddressableStorageServer::new(
+            crate::content_addressable_storage_server::ContentAddressableStorageServer::new(
+                memory_store.clone(),
+            ),
+        ))
         .add_service(ByteStreamServer::new(
             crate::byte_stream_server::ByteStreamServer::new(memory_store),
         ))

@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     pin::Pin,
     sync::{Arc, Mutex},
 };
@@ -12,14 +13,71 @@ use crate::{
         byte_stream_server::ByteStream, QueryWriteStatusRequest, QueryWriteStatusResponse,
         ReadRequest, ReadResponse, WriteRequest, WriteResponse,
     },
+    resource_id::ResourceId,
 };
+
+static MAX_MESSAGE_SIZE: u64 = 16384;
+
+#[derive(Default)]
+pub struct ReadResponseStream {
+    memory_store: Arc<Mutex<MemoryStore>>,
+    resource_id: ResourceId,
+    read_offset: u64,
+    read_limit: u64,
+}
+
+// resource_name: "blobs/8f9cf8177c72cbdc437b5be8e336361ae1b578dfaade8174bcc196890ef6871e/38397", read_offset: 0, read_limit: 0
+impl ReadResponseStream {
+    pub fn new(
+        memory_store: Arc<Mutex<MemoryStore>>,
+        resource_id: ResourceId,
+        read_offset: u64,
+        read_limit: u64,
+    ) -> ReadResponseStream {
+        assert!(read_limit >= read_offset);
+        ReadResponseStream {
+            memory_store: memory_store,
+            resource_id: resource_id,
+            read_offset: read_offset,
+            read_limit: read_limit,
+        }
+    }
+}
+
+impl Stream for ReadResponseStream {
+    type Item = Result<ReadResponse, Status>;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let read_dist = cmp::min(MAX_MESSAGE_SIZE, self.read_limit - self.read_offset);
+        let data = self.memory_store.lock().unwrap().get_data(
+            &self.resource_id,
+            self.read_offset,
+            read_dist,
+        );
+        if data.is_none() {
+            return std::task::Poll::Ready(Some(Err(Status::new(
+                tonic::Code::NotFound,
+                "There was an error writing data",
+            ))));
+        }
+        let data = data.unwrap();
+        if data.is_empty() {
+            // There is no more data left to send back
+            return std::task::Poll::Ready(None);
+        }
+        return std::task::Poll::Ready(Some(Ok(ReadResponse { data: data })));
+    }
+}
 
 #[derive(Default)]
 pub struct ByteStreamServer {
     memory_store: Arc<Mutex<MemoryStore>>,
 }
 
-type ReadResponseStream = Pin<Box<dyn Stream<Item = Result<ReadResponse, Status>> + Send>>;
+// type ReadResponseStream = Pin<Box<dyn Stream<Item = Result<ReadResponse, Status>> + Send>>;
 
 impl ByteStreamServer {
     pub fn new(memory_store: Arc<Mutex<MemoryStore>>) -> ByteStreamServer {
@@ -32,35 +90,6 @@ impl ByteStreamServer {
 #[tonic::async_trait]
 impl ByteStream for ByteStreamServer {
     type ReadStream = ReadResponseStream;
-    // type BidirectionalStreamingWriteStream = WriteResponseStream;
-
-    // async fn find_missing_blobs(&self, find_missing_blobs_req: tonic::Request<FindMissingBlobsRequest>) -> Result<Response<FindMissingBlobsResponse>, Status> {
-    //     println!("FB:\n{:?}", find_missing_blobs_req);
-    //     Ok(tonic::Response::new(FindMissingBlobsResponse { missing_blob_digests: find_missing_blobs_req.into_inner().blob_digests }))
-    //     // todo!()
-    // }
-
-    // async fn batch_update_blobs(&self, batch_update_blobs_req: tonic::Request<BatchUpdateBlobsRequest>) -> Result<Response<BatchUpdateBlobsResponse>, Status> {
-    //     println!("BUB:\n{:?}", batch_update_blobs_req);
-    //     todo!()
-    // }
-
-    // async fn batch_read_blobs(&self, batch_read_blobs_req: tonic::Request<BatchReadBlobsRequest>) -> Result<Response<BatchReadBlobsResponse>, Status> {
-    //     println!("BRB:\n{:?}", batch_read_blobs_req);
-    //     todo!()
-    // }
-
-    // async fn bidirectional_streaming_echo(
-    //         &self,
-    //         req: Request<Streaming<EchoRequest>>,
-    //     ) -> EchoResult<Self::BidirectionalStreamingEchoStream> {
-
-    // async fn write(
-    //     &self,
-    //     req: Request<tonic::Streaming<WriteRequest> >,
-    // ) -> Result<tonic::Response<Self::BidirectionalStreamingWriteStream>, tonic::Status> {
-    //     todo!()
-    // }
 
     async fn write(
         &self,
@@ -109,18 +138,6 @@ impl ByteStream for ByteStreamServer {
             ));
         }
         let comitted_len = comitted_len.unwrap();
-        // if let Some(next_message) = write_requests.into_inner().message().await {
-        //     println!("{:?}", next_message);
-        // }
-        // for write_request in write_requests.into_inner() {
-
-        // }
-        // println!("WRITE:\n{:?}", write_request);
-        // let (length, complete) = self
-        //     .memory_store
-        //     .lock()
-        //     .unwrap()
-        //     .get_write_status(query_write_status_req.into_inner().resource_name);
         Ok(tonic::Response::new(WriteResponse {
             committed_size: comitted_len.try_into().unwrap(),
         }))
@@ -130,8 +147,16 @@ impl ByteStream for ByteStreamServer {
         &self,
         read_request: tonic::Request<ReadRequest>,
     ) -> Result<tonic::Response<Self::ReadStream>, tonic::Status> {
+        // Ok(tonic::Streaming::())
         println!("READ:\n{:?}", read_request);
-        todo!()
+        let read_request = read_request.into_inner();
+        return Ok(tonic::Response::new(ReadResponseStream::new(
+            self.memory_store.clone(),
+            read_request.resource_name.try_into().unwrap(),
+            read_request.read_offset.try_into().unwrap(),
+            read_request.read_limit.try_into().unwrap(),
+        )));
+        // todo!()
     }
 
     async fn query_write_status(

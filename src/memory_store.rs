@@ -4,6 +4,11 @@ use crate::proto::build::bazel::remote::execution::v2::ActionResult;
 use crate::resource_id::{ResourceData, ResourceId};
 use std::collections::HashMap;
 
+enum CacheEntry {
+    ActionResult,
+    ResourceData,
+}
+
 #[derive(Default)]
 pub struct MemoryStore {
     cas: HashMap<ResourceId, ResourceData>,
@@ -20,11 +25,15 @@ impl MemoryStore {
         }
     }
 
-    pub fn get_action_cache(&self, resource_id: &ResourceId) -> Option<&ActionResult> {
+    pub fn get_action_cache_ref(&self, resource_id: &ResourceId) -> Option<&ActionResult> {
         return self.action_cache.get(resource_id);
     }
 
-    pub fn set_action_cache(&self, resource_id: ResourceId, action_result: ActionResult) {
+    pub fn get_action_cache(&self, resource_id: &ResourceId) -> Option<ActionResult> {
+        return self.action_cache.get(resource_id).cloned();
+    }
+
+    pub fn set_action_cache(&mut self, resource_id: ResourceId, action_result: ActionResult) {
         self.action_cache.insert(resource_id, action_result);
     }
 
@@ -105,5 +114,19 @@ impl MemoryStore {
         }
         let erased_data = self.upload_cache.remove(resource_name).unwrap();
         Some(self.store_data(resource_name, erased_data))
+    }
+
+    pub fn get_data(&self, resource_id: &ResourceId, offset: u64, limit: u64) -> Option<Vec<u8>> {
+        let resource_data = self.cas.get(&resource_id)?;
+        let offset: usize = offset.try_into().unwrap();
+        let limit: usize = limit.try_into().unwrap();
+        if offset >= resource_data.data.len().try_into().unwrap() {
+            return Some(vec![]);
+        }
+        Some(resource_data.data[offset..offset + limit].to_vec())
+    }
+
+    pub fn has_data(&self, resource_id: &ResourceId) -> bool {
+        self.cas.contains_key(&resource_id)
     }
 }

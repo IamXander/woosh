@@ -8,12 +8,12 @@ pub struct ResourceData {
     // TODO: include a ttl
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Default)]
 pub struct SHA256 {
     pub hash: [u8; 32],
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Default)]
 pub struct ResourceId {
     pub length: u64,
     pub hash: SHA256,
@@ -61,6 +61,26 @@ impl From<Digest> for ResourceId {
             length: digest.size_bytes.try_into().unwrap(),
             hash: digest.hash.into(),
         }
+    }
+}
+
+impl TryFrom<String> for ResourceId {
+    type Error = String; // TODO: This is bad
+
+    fn try_from(resource_name: String) -> Result<Self, Self::Error> {
+        let resources: Vec<&str> = resource_name.split('/').collect();
+        if resources[0] != "blobs" {
+            return Err("First word was not blobs".to_string());
+        }
+        let length = resources[2].parse();
+        if length.is_err() {
+            return Err("Could not convert length".to_string());
+        }
+
+        Ok(ResourceId {
+            length: length.unwrap(),
+            hash: resources[1].into(),
+        })
     }
 }
 
