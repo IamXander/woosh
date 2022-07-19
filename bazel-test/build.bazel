@@ -1,4 +1,23 @@
 cc_binary(
-    name = "example",
-    srcs = ["example.cpp"],
+    name = "hello_world",
+    srcs = ["hello_world/hello_world.cpp"],
+)
+
+py_test(
+    name = "merge_test_py",
+    srcs = ["merge_test/merge_test.py"],
+    data = glob(["merge_test/example_files/**/*.txt"]),
+    main = "merge_test/merge_test.py",
+)
+
+cc_library(
+    name = "large_cpp_lib",
+    srcs = glob(["large_cpp_test/**/*.cpp"]),
+    hdrs = glob(["large_cpp_test/**/*.h"]),
+)
+
+cc_test(
+    name = "large_cpp_bin",
+    srcs = ["large_cpp_test/main.cpp"],
+    deps = ["large_cpp_lib"]
 )
