@@ -28,7 +28,9 @@ impl fmt::Display for CacheEntry {
 
 #[derive(Default)]
 pub struct MemoryStore {
+    // <sha256>/<length> -> data
     cache: HashMap<ResourceId, CacheEntry>,
+    // uploads/<uuid>/blobs/<sha256>/<length> -> data
     upload_cache: HashMap<String, Vec<u8>>,
 }
 
