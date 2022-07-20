@@ -1,6 +1,10 @@
 use std::{cmp, fmt::Display};
 
-use crate::proto::build::bazel::remote::execution::v2::Digest;
+use prost::Message;
+
+use crate::proto::build::bazel::remote::execution::v2::{
+    Action, Command, Digest, Directory, Platform,
+};
 
 #[derive(Clone, Debug)]
 pub struct ResourceData {
@@ -23,7 +27,37 @@ pub struct ResourceId {
 
 impl Display for ResourceData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let elms_to_show = cmp::min(self.data.len(), 16);
+        // Action
+        // Command
+        // Directory
+        let action = Action::decode(self.data.as_slice());
+        if action.is_ok() {
+            return write!(
+                f,
+                "ResourceData of length {} with [{:?}]",
+                self.data.len(),
+                action
+            );
+        }
+        let command = Command::decode(self.data.as_slice());
+        if command.is_ok() {
+            return write!(
+                f,
+                "ResourceData of length {} with [{:?}]",
+                self.data.len(),
+                command
+            );
+        }
+        let directory = Directory::decode(self.data.as_slice());
+        if directory.is_ok() {
+            return write!(
+                f,
+                "ResourceData of length {} with [{:?}]",
+                self.data.len(),
+                directory
+            );
+        }
+        let elms_to_show = cmp::min(self.data.len(), 8);
         let elms_print: Vec<String> = self.data[0..elms_to_show]
             .into_iter()
             .map(|i| i.to_string())

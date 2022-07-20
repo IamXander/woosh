@@ -163,6 +163,23 @@ impl MemoryStore {
         }
     }
 
+    pub fn get_typed_data<MessageType: prost::Message + std::default::Default>(
+        &self,
+        resource_id: &ResourceId,
+    ) -> Option<MessageType> {
+        let cache_entry = self.cache.get(&resource_id)?;
+        if let CacheEntry::RD(resource_data) = cache_entry {
+            let message = MessageType::decode(resource_data.data.as_slice());
+            if message.is_err() {
+                trace!("Error converting typed data");
+                return None;
+            }
+            Some(message.unwrap())
+        } else {
+            return None;
+        }
+    }
+
     pub fn in_cache(&self, resource_id: &ResourceId) -> bool {
         self.cache.contains_key(&resource_id)
     }

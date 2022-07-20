@@ -4,7 +4,7 @@ use crate::proto::build::bazel::{
     remote::execution::v2::{
         capabilities_server::Capabilities, compressor, digest_function,
         symlink_absolute_path_strategy, ActionCacheUpdateCapabilities, CacheCapabilities,
-        GetCapabilitiesRequest, PriorityCapabilities, ServerCapabilities,
+        ExecutionCapabilities, GetCapabilitiesRequest, PriorityCapabilities, ServerCapabilities,
     },
     semver::SemVer,
 };
@@ -39,7 +39,12 @@ impl Capabilities for CapabilitiesServer {
                 supported_compressors: vec![compressor::Value::Identity.into()],
                 supported_batch_update_compressors: vec![compressor::Value::Identity.into()],
             }),
-            execution_capabilities: None,
+            execution_capabilities: Some(ExecutionCapabilities {
+                digest_function: digest_function::Value::Sha256.into(),
+                exec_enabled: true,
+                execution_priority_capabilities: None,
+                supported_node_properties: vec![],
+            }),
             deprecated_api_version: None,
             low_api_version: Some(SemVer {
                 major: 2,
