@@ -148,14 +148,6 @@ fn get_resource_id(message_enc: Vec<u8>) -> ResourceId {
     }
 }
 
-async fn upload_to_cache<MessageType: prost::Message>(
-    resource_id: ResourceId,
-    message: &MessageType,
-    byte_stream_client: &mut ByteStreamClient<Channel>,
-) -> bool {
-    upload_data(resource_id, message.encode_to_vec(), byte_stream_client).await
-}
-
 async fn find_missing_blobs(
     blobs: &Vec<(ResourceId, Vec<u8>)>,
     cas_client: &mut ContentAddressableStorageClient<Channel>,
@@ -192,9 +184,10 @@ async fn upload_blobs(
         .collect();
     // There are some missing blobs
     for (res, blob) in blobs {
-        if missing_blobs.contains(&res) {
+        if !missing_blobs.contains(&res) {
             continue;
         }
+        error!("Uploading {}", res);
         // TODO: run this async
         if !upload_data(res.clone(), blob, byte_stream_client).await {
             error!("Failed to upload to cache");
@@ -202,31 +195,6 @@ async fn upload_blobs(
         }
     }
     return true;
-}
-
-async fn upload_file(
-    path: &String,
-    byte_stream_client: &mut ByteStreamClient<Channel>,
-    action_cache_client: &mut ActionCacheClient<Channel>,
-    cas_client: &mut ContentAddressableStorageClient<Channel>,
-) -> Option<ResourceId> {
-    let file_data = fs::read(path).unwrap();
-    let resource_id = get_resource_id(file_data.clone());
-    let missing_blobs = cas_client
-        .find_missing_blobs(FindMissingBlobsRequest {
-            instance_name: "".to_string(),
-            blob_digests: vec![resource_id.clone().into()],
-        })
-        .await
-        .unwrap();
-    // There are some missing blobs
-    if missing_blobs.into_inner().missing_blob_digests.len() > 0 {
-        if !upload_data(resource_id.clone(), file_data, byte_stream_client).await {
-            error!("Failed to upload to cache");
-            return None;
-        }
-    }
-    return Some(resource_id);
 }
 
 async fn upload_data(
@@ -315,38 +283,12 @@ fn build_action_result(output_files: Vec<String>, exit_code: i32) -> (ResourceId
     return (resource_id, action_result);
 }
 
-async fn upload_command(
-    command_args: Vec<String>,
-    expected_files: Vec<String>,
-    byte_stream_client: &mut ByteStreamClient<Channel>,
-    action_cache_client: &mut ActionCacheClient<Channel>,
-    cas_client: &mut ContentAddressableStorageClient<Channel>,
-) -> Option<ResourceId> {
-    let (resource_id, command) = build_command(command_args, expected_files);
-    let missing_blobs = cas_client
-        .find_missing_blobs(FindMissingBlobsRequest {
-            instance_name: "".to_string(),
-            blob_digests: vec![resource_id.clone().into()],
-        })
-        .await
-        .unwrap();
-    // There are some missing blobs
-    if missing_blobs.into_inner().missing_blob_digests.len() > 0 {
-        if !upload_to_cache(resource_id.clone(), &command, byte_stream_client).await {
-            error!("Failed to upload to cache");
-            return None;
-        }
-    }
-    return Some(resource_id);
-    // todo!()
-}
-
 async fn client_check(
     check: Check,
     byte_stream_client: &mut ByteStreamClient<Channel>,
     action_cache_client: &mut ActionCacheClient<Channel>,
     cas_client: &mut ContentAddressableStorageClient<Channel>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<i32, Box<dyn std::error::Error>> {
     let pull_res = client_pull(
         Pull { input: check.input },
         byte_stream_client,
@@ -355,100 +297,17 @@ async fn client_check(
     )
     .await;
     if pull_res.is_ok() {
-        std::process::exit(0);
+        return Ok(0);
     }
-    std::process::exit(1);
-    // Ok(pull_res.is_ok())
-    // let json_input = fs::read_to_string(check.input)?;
-    // let mut json: TestInput = serde_json::from_str(&json_input)?;
-    // // Sort the files so they will give the same hash
-    // json.input_files.sort();
-    // json.expected_files.sort();
-    // let mut json_properties_keys_sorted: Vec<String> =
-    //     json.properties.keys().map(|x| x.clone()).collect();
-    // // Sort the properties so they will give the same hash
-    // json_properties_keys_sorted.sort();
-    // let mut output_files: Vec<OutputFile> = Vec::new();
-    // // let mut action: Action = Action {
-    // //     command_digest: todo!(),
-    // //     input_root_digest: todo!(),
-    // //     timeout: todo!(),
-    // //     do_not_cache: todo!(),
-    // //     salt: vec![],
-    // //     platform: None,
-    // // };
-    // // let mut action_result: ActionResult = ActionResult {
-    // //     output_files: todo!(),
-    // //     output_file_symlinks: todo!(),
-    // //     output_symlinks: todo!(),
-    // //     output_directories: todo!(),
-    // //     output_directory_symlinks: todo!(),
-    // //     exit_code: todo!(),
-    // //     stdout_raw: todo!(),
-    // //     stdout_digest: todo!(),
-    // //     stderr_raw: todo!(),
-    // //     stderr_digest: todo!(),
-    // //     execution_metadata: todo!(),
-    // // };
-    // let mut hasher = Sha256::new();
-
-    // let command_resource_id = upload_command(
-    //     json.command,
-    //     json.expected_files,
-    //     byte_stream_client,
-    //     action_cache_client,
-    //     cas_client,
-    // )
-    // .await;
-    // if command_resource_id.is_none() {
-    //     error!("Failed to upload command {:?}", command_resource_id);
-    //     return Err(Box::new(std::io::Error::new(ErrorKind::Other, "oh no!")));
-    // }
-    // let command_resource_id = command_resource_id.unwrap();
-
-    // for input_file in json.input_files {
-    //     let uploaded_file = upload_file(
-    //         &input_file,
-    //         byte_stream_client,
-    //         action_cache_client,
-    //         cas_client,
-    //     )
-    //     .await;
-    //     if !uploaded_file.is_none() {
-    //         error!("Failed to upload file {}", input_file);
-    //         return Err(Box::new(std::io::Error::new(ErrorKind::Other, "oh no!")));
-    //     }
-    //     let uploaded_file = uploaded_file.unwrap();
-    //     // output_files.push(uploaded_file.clone());
-
-    //     // OutputFile::encode_to_vec(&self)
-    //     // let mut hasher = Sha256::new();
-    //     // hasher.update(uploaded_file.encode_to_vec());
-    //     // uploaded_file.unwrap().encode_to_vec()
-    // }
-
-    // // for prop in json_properties_keys_sorted {
-    // //     let val = json.properties.get(&prop).unwrap();
-    // //     hasher.update(prop);
-    // //     hasher.update(val);
-    // // }
-
-    // // let result = hasher.finalize();
-
-    // // ActionResult {
-    // // output_files: [
-    // // OutputFile { path: "bazel-out/darwin_arm64-fastbuild/bin/hello_world", digest: Some(Digest { hash: "33b2e46e63417646ffdee5eaba70cccf8e7bcc8ce1c52e6faa970fc2f1df59f0", size_bytes: 39864 }), is_executable: true, contents: [], node_properties: None }
-    // // ],
-    // // output_file_symlinks: [], output_symlinks: [], output_directories: [], output_directory_symlinks: [], exit_code: 0, stdout_raw: [], stdout_digest: Some(Digest { hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size_bytes: 0 }), stderr_raw: [], stderr_digest: Some(Digest { hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size_bytes: 0 }), execution_metadata: None }
-
-    // return Ok(());
+    return Ok(1);
 }
+
 async fn client_pull(
     pull: Pull,
     byte_stream_client: &mut ByteStreamClient<Channel>,
     action_cache_client: &mut ActionCacheClient<Channel>,
     cas_client: &mut ContentAddressableStorageClient<Channel>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<i32, Box<dyn std::error::Error>> {
     let json_input_str = fs::read_to_string(pull.input)?;
     let test_input: TestInput = serde_json::from_str(&json_input_str)?;
     let (command_resource_id, command, mut input_files, action_resource_id, action) =
@@ -462,14 +321,13 @@ async fn client_pull(
     let action_result = action_cache_client
         .get_action_result(GetActionResultRequest {
             instance_name: "".to_string(),
-            action_digest: Some(v2::Digest::from(action_resource_id)),
+            action_digest: Some(action_resource_id.into()),
             inline_stdout: false,
             inline_stderr: false,
             inline_output_files: vec![],
         })
         .await?;
-    std::process::exit(action_result.into_inner().exit_code);
-    // Ok(action_result.into_inner().exit_code)
+    Ok(action_result.into_inner().exit_code)
 }
 
 fn build_input_objects(
@@ -502,7 +360,7 @@ async fn client_push(
     byte_stream_client: &mut ByteStreamClient<Channel>,
     action_cache_client: &mut ActionCacheClient<Channel>,
     cas_client: &mut ContentAddressableStorageClient<Channel>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<i32, Box<dyn std::error::Error>> {
     let json_input_str = fs::read_to_string(push.input)?;
     let json_output_str = fs::read_to_string(push.output)?;
     let test_input: TestInput = serde_json::from_str(&json_input_str)?;
@@ -520,16 +378,15 @@ async fn client_push(
     )
     .await;
     assert!(upload_res);
-    let action_result_req = UpdateActionResultRequest {
-        instance_name: "".to_string(),
-        action_digest: Some(action_result_resource_id.into()),
-        action_result: Some(action_result),
-        results_cache_policy: None,
-    };
     action_cache_client
-        .update_action_result(action_result_req)
+        .update_action_result(UpdateActionResultRequest {
+            instance_name: "".to_string(),
+            action_digest: Some(action_resource_id.into()),
+            action_result: Some(action_result),
+            results_cache_policy: None,
+        })
         .await?;
-    return Ok(());
+    return Ok(0);
 }
 
 #[tokio::main]
@@ -540,9 +397,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     env_logger::init_from_env(logging_env);
 
-    // let mut execution_client = ExecutionClient::connect("http://[::1]:50051")
-    //     .await
-    //     .unwrap();
     let mut byte_stream_client = ByteStreamClient::connect("http://[::1]:50051")
         .await
         .unwrap();
@@ -553,12 +407,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .unwrap();
 
-    // byte_stream_client.
-
     let cli_args = CLI::parse();
-    match cli_args {
+    let ret_code = match cli_args {
         CLI::Check(check) => {
-            return client_check(
+            client_check(
                 check,
                 &mut byte_stream_client,
                 &mut action_cache_client,
@@ -567,7 +419,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
         }
         CLI::Pull(pull) => {
-            return client_pull(
+            client_pull(
                 pull,
                 &mut byte_stream_client,
                 &mut action_cache_client,
@@ -576,7 +428,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
         }
         CLI::Push(push) => {
-            return client_push(
+            client_push(
                 push,
                 &mut byte_stream_client,
                 &mut action_cache_client,
@@ -584,25 +436,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .await
         }
-    }
-    // serde_json::fr
-    // let mut client = ExecutionClient::connect("http://[::1]:50051")
-    //     .await
-    //     .unwrap();
+    }?;
 
-    // println!("Streaming echo:");
-    // streaming_echo(&mut client, 5).await;
-    // tokio::time::sleep(Duration::from_secs(1)).await; //do not mess server println functions
-
-    // Echo stream that sends 17 requests then graceful end that connection
-    // println!("\r\nBidirectional stream echo:");
-    // bidirectional_streaming_echo(&mut client, 17).await;
-
-    // // Echo stream that sends up to `usize::MAX` requets. One request each 2s.
-    // // Exiting client with CTRL+C demonstrate how to distinguish broken pipe from
-    // //graceful client disconnection (above example) on the server side.
-    // println!("\r\nBidirectional stream echo (kill client with CTLR+C):");
-    // bidirectional_streaming_echo_throttle(&mut client, Duration::from_secs(2)).await;
-
-    Ok(())
+    std::process::exit(ret_code);
 }
