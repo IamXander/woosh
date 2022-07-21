@@ -106,7 +106,8 @@ impl Stream for ByteStreamClientWriter {
         mut self: std::pin::Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        if self.write_offset >= self.data.len() {
+        // self.write_offset != 0 - we need to send at least one "good" before we kill the stream
+        if self.write_offset >= self.data.len() && self.write_offset != 0 {
             // We are done
             return std::task::Poll::Ready(None);
         } else if self.write_offset + MAX_MESSAGE_SIZE >= self.data.len() {
@@ -117,7 +118,8 @@ impl Stream for ByteStreamClientWriter {
                 finish_write: true,
                 data: self.data[self.write_offset..].to_vec(),
             };
-            self.write_offset = self.data.len();
+            // Add an additional in the case of an empty file
+            self.write_offset = self.data.len() + 1;
             return std::task::Poll::Ready(Some(wr));
         } else {
             let wr = WriteRequest {
@@ -315,7 +317,7 @@ async fn client_pull(
     let json_input_str = fs::read_to_string(pull.input)?;
     let test_input: TestInput = serde_json::from_str(&json_input_str)?;
     let (command_resource_id, command, mut input_files, action_resource_id, _action) =
-        build_input_objects(test_input);
+        build_input_objects(test_input).await;
     input_files.push((command_resource_id, command.encode_to_vec()));
     let missing_blobs = find_missing_blobs(&input_files, cas_client).await;
     if !missing_blobs.is_empty() {
@@ -334,7 +336,7 @@ async fn client_pull(
     Ok(action_result.into_inner().exit_code)
 }
 
-fn build_input_objects(
+async fn build_input_objects(
     test_input: TestInput,
 ) -> (
     ResourceId,
@@ -345,9 +347,14 @@ fn build_input_objects(
 ) {
     let (command_resource_id, command) =
         build_command(test_input.command, test_input.expected_files);
+    let mut hashing_funcs = Vec::new();
     let mut input_files = Vec::new();
-    for input_file in test_input.input_files {
-        input_files.push(build_file(&input_file));
+    for input_file in test_input.input_files.clone() {
+        hashing_funcs.push(tokio::task::spawn_blocking(move || build_file(&input_file)));
+    }
+
+    for hashing_func in hashing_funcs {
+        input_files.push(hashing_func.await.unwrap())
     }
     let (action_resource_id, action) = build_action(&input_files, command_resource_id.clone());
     return (
@@ -370,7 +377,7 @@ async fn client_push(
     let test_input: TestInput = serde_json::from_str(&json_input_str)?;
     let test_ouput: TestResults = serde_json::from_str(&json_output_str)?;
     let (command_resource_id, command, mut input_files, action_resource_id, _action) =
-        build_input_objects(test_input);
+        build_input_objects(test_input).await;
     let (_action_result_resource_id, action_result) =
         build_action_result(test_ouput.files, test_ouput.exit_code);
     input_files.push((command_resource_id, command.encode_to_vec()));

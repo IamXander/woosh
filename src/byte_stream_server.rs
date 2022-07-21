@@ -5,7 +5,7 @@ use std::{
 };
 
 use futures::Stream;
-use log::{error, trace, warn};
+use log::{error, info, trace, warn};
 use tonic::Status;
 
 use crate::{
@@ -129,13 +129,19 @@ impl ByteStream for ByteStreamServer {
             }
             let write_request = write_request.unwrap();
             if write_request.is_none() {
+                if comitted_len.is_none() {
+                    error!("Write request is none and no data has been comitted, this is because there is a bug in the client");
+                } else {
+                    info!("Write request is none and data has been comitted");
+                }
                 break;
             }
             let write_request = write_request.unwrap();
             if resource_name == "" {
                 resource_name = write_request.resource_name.clone()
             }
-            trace!("WRITE:\n{:?}", write_request);
+            // trace!("WRITE:\n{:?}", write_request);
+            trace!("WRITE:");
             comitted_len = self.memory_store.lock().unwrap().append_data(
                 &resource_name,
                 write_request.data,
