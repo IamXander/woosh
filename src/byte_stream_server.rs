@@ -135,7 +135,7 @@ impl ByteStream for ByteStreamServer {
             if resource_name == "" {
                 resource_name = write_request.resource_name.clone()
             }
-            // trace!("WRITE:\n{:?}", write_request);
+            trace!("WRITE:\n{:?}", write_request);
             comitted_len = self.memory_store.lock().unwrap().append_data(
                 &resource_name,
                 write_request.data,

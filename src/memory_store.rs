@@ -1,4 +1,4 @@
-use log::trace;
+use log::{trace, warn};
 
 use crate::proto::build::bazel::remote::execution::v2::ActionResult;
 use crate::resource_id::{ResourceData, ResourceId};
@@ -104,10 +104,9 @@ impl MemoryStore {
             // If a write comes in with a non zero offset that we have not seen before
             if write_offset != 0 {
                 let (_, uuid) = ResourceId::from_resource_name(resource_name);
-                trace!(
+                warn!(
                     "A new write attempted with offset {:?} that has uuid {:?}",
-                    write_offset,
-                    uuid
+                    write_offset, uuid
                 );
                 return None;
             }

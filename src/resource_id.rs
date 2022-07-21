@@ -117,6 +117,15 @@ impl From<Digest> for ResourceId {
     }
 }
 
+impl From<ResourceId> for Digest {
+    fn from(resource_id: ResourceId) -> Self {
+        Digest {
+            hash: resource_id.hash.into(),
+            size_bytes: resource_id.length.try_into().unwrap(),
+        }
+    }
+}
+
 impl TryFrom<String> for ResourceId {
     type Error = String; // TODO: This is bad
 

@@ -1,0 +1,16 @@
+{
+    "input_files": [
+        "LICENSE",
+        "README.md"
+    ],
+    "expected_files": [
+        "OUTPUT.md"
+    ],
+    "command": [
+        "yeet",
+        "yeet1",
+        "yeet2",
+        "yeet3",
+        "yeet4"
+    ]
+}
