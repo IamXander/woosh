@@ -14,7 +14,7 @@ use crate::resource_id::ResourceId;
 use clap::Parser;
 use env_logger::Env;
 use futures::Stream;
-use log::error;
+use log::{error, warn, info};
 use prost::Message;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -185,7 +185,7 @@ async fn upload_blobs(
         if !missing_blobs.contains(&res) {
             continue;
         }
-        error!("Uploading {}", res);
+        info!("Uploading {}", res);
         // TODO: run this async
         if !upload_data(res.clone(), blob, byte_stream_client).await {
             error!("Failed to upload to cache");
@@ -321,7 +321,7 @@ async fn client_pull(
     input_files.push((command_resource_id, command.encode_to_vec()));
     let missing_blobs = find_missing_blobs(&input_files, cas_client).await;
     if !missing_blobs.is_empty() {
-        error!("Woops your stuff is not in the cache");
+        warn!("Some data you asked for is not in the cache");
         return Err(Box::new(std::io::Error::new(ErrorKind::Other, "oh no!")));
     }
     let action_result = action_cache_client

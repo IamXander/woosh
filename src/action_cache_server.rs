@@ -52,7 +52,7 @@ impl ActionCache for ActionCacheServer {
             ));
         }
 
-        trace!("{}", self.memory_store.lock().unwrap());
+        // trace!("{}", self.memory_store.lock().unwrap());
 
         return Ok(tonic::Response::new(action_result.unwrap().clone()));
     }
@@ -81,7 +81,7 @@ impl ActionCache for ActionCacheServer {
             action_result.clone(),
         );
 
-        trace!("{}", self.memory_store.lock().unwrap());
+        // trace!("{}", self.memory_store.lock().unwrap());
 
         return Ok(tonic::Response::new(action_result.clone()));
     }

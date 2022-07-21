@@ -39,7 +39,7 @@ impl ContentAddressableStorage for ContentAddressableStorageServer {
         find_missing_blobs_req: tonic::Request<FindMissingBlobsRequest>,
     ) -> Result<tonic::Response<FindMissingBlobsResponse>, Status> {
         let find_missing_blobs_req = find_missing_blobs_req.into_inner();
-        trace!("FB:\n{:?}", find_missing_blobs_req);
+        // trace!("FB:\n{:?}", find_missing_blobs_req);
         let mut missing_blob_digests = vec![];
         for blob_digest in find_missing_blobs_req.blob_digests {
             let resource_id = blob_digest.clone().into();
