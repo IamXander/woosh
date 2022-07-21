@@ -4,10 +4,9 @@ mod resource_id;
 use crate::proto::build::bazel::remote::execution::v2;
 use crate::proto::build::bazel::remote::execution::v2::action_cache_client::ActionCacheClient;
 use crate::proto::build::bazel::remote::execution::v2::content_addressable_storage_client::ContentAddressableStorageClient;
-use crate::proto::build::bazel::remote::execution::v2::execution_client::ExecutionClient;
 use crate::proto::build::bazel::remote::execution::v2::{
-    Action, ActionResult, Command, Directory, ExecuteRequest, FindMissingBlobsRequest,
-    GetActionResultRequest, OutputFile, UpdateActionResultRequest,
+    Action, ActionResult, Command, FindMissingBlobsRequest, GetActionResultRequest,
+    UpdateActionResultRequest,
 };
 use crate::proto::google::bytestream::byte_stream_client::ByteStreamClient;
 use crate::proto::google::bytestream::WriteRequest;
@@ -19,12 +18,10 @@ use log::error;
 use prost::Message;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::fs;
 use std::io::ErrorKind;
-use std::time::Duration;
-use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use uuid::Uuid;
 
@@ -174,7 +171,6 @@ async fn find_missing_blobs(
 async fn upload_blobs(
     blobs: Vec<(ResourceId, Vec<u8>)>,
     byte_stream_client: &mut ByteStreamClient<Channel>,
-    action_cache_client: &mut ActionCacheClient<Channel>,
     cas_client: &mut ContentAddressableStorageClient<Channel>,
 ) -> bool {
     let missing_blobs: HashSet<ResourceId> = find_missing_blobs(&blobs, cas_client)
@@ -211,7 +207,15 @@ async fn upload_data(
 }
 
 fn build_file(path: &String) -> (ResourceId, Vec<u8>) {
-    let file_data = fs::read(path).unwrap();
+    let file_data = fs::read(path);
+    if file_data.is_err() {
+        panic!(
+            "Could not open file {} with error {}",
+            path,
+            file_data.unwrap_err()
+        );
+    }
+    let file_data = file_data.unwrap();
     let resource_id = get_resource_id(file_data.clone());
     return (resource_id, file_data);
 }
@@ -304,13 +308,13 @@ async fn client_check(
 
 async fn client_pull(
     pull: Pull,
-    byte_stream_client: &mut ByteStreamClient<Channel>,
+    _byte_stream_client: &mut ByteStreamClient<Channel>,
     action_cache_client: &mut ActionCacheClient<Channel>,
     cas_client: &mut ContentAddressableStorageClient<Channel>,
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let json_input_str = fs::read_to_string(pull.input)?;
     let test_input: TestInput = serde_json::from_str(&json_input_str)?;
-    let (command_resource_id, command, mut input_files, action_resource_id, action) =
+    let (command_resource_id, command, mut input_files, action_resource_id, _action) =
         build_input_objects(test_input);
     input_files.push((command_resource_id, command.encode_to_vec()));
     let missing_blobs = find_missing_blobs(&input_files, cas_client).await;
@@ -365,18 +369,12 @@ async fn client_push(
     let json_output_str = fs::read_to_string(push.output)?;
     let test_input: TestInput = serde_json::from_str(&json_input_str)?;
     let test_ouput: TestResults = serde_json::from_str(&json_output_str)?;
-    let (command_resource_id, command, mut input_files, action_resource_id, action) =
+    let (command_resource_id, command, mut input_files, action_resource_id, _action) =
         build_input_objects(test_input);
-    let (action_result_resource_id, action_result) =
+    let (_action_result_resource_id, action_result) =
         build_action_result(test_ouput.files, test_ouput.exit_code);
     input_files.push((command_resource_id, command.encode_to_vec()));
-    let upload_res = upload_blobs(
-        input_files,
-        byte_stream_client,
-        action_cache_client,
-        cas_client,
-    )
-    .await;
+    let upload_res = upload_blobs(input_files, byte_stream_client, cas_client).await;
     assert!(upload_res);
     action_cache_client
         .update_action_result(UpdateActionResultRequest {

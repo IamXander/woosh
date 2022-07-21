@@ -2,9 +2,7 @@ use std::{cmp, fmt::Display};
 
 use prost::Message;
 
-use crate::proto::build::bazel::remote::execution::v2::{
-    Action, Command, Digest, Directory, Platform,
-};
+use crate::proto::build::bazel::remote::execution::v2::{Action, Command, Digest, Directory};
 
 #[derive(Clone, Debug)]
 pub struct ResourceData {
